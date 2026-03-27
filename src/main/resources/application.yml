@@ -8,10 +8,7 @@ server:
      enabled: false  # 기본 whitelabel 에러 페이지 비활성화
    path: /error
  ssl:
-   enabled: true
-   key-store: ${KEYSTORE}
-   key-store-type: ${KEYSTORETYPE}
-   key-store-password: ${KEYSTOREPASS}
+   enabled: false
 
 
 jwt:
@@ -30,7 +27,7 @@ admin:
 app:
   frontend-url: ${APP_FRONTEND_URL:https://www.fileinnout.kro.kr}
   backend-url: ${APP_BACKEND_URL:https://api.fileinnout.kro.kr}
-  secure-cookie: ${APP_SECURE_COOKIE:false}
+  secure-cookie: false
 
 spring:
   data:
@@ -102,7 +99,7 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.MariaDBDialect
     hibernate:
-      ddl-auto: update
+      ddl-auto: create
     properties:
       hibernate:
         format_sql: true

@@ -25,17 +25,17 @@ import java.util.Map;
 public class LoginFilter extends UsernamePasswordAuthenticationFilter {
     private final AuthenticationManager authenticationManager;
     private final AuthService authService;
-    private final boolean secureCookie;
+
+    @Value("#{'${app.secure-cookie:false}' == '' ? false : '${app.secure-cookie:false}'}")
+    private boolean secureCookie; // 생성자 파라미터가 아니라 필드에 직접!
 
     public LoginFilter(
             AuthenticationManager authenticationManager,
-            AuthService authService,
-            @Value("${app.secure-cookie}") boolean secureCookie) {
+            AuthService authService) {
 
         super(authenticationManager);
         this.authenticationManager = authenticationManager;
         this.authService = authService;
-        this.secureCookie = secureCookie;
     }
 
     @Override
