@@ -1,4 +1,4 @@
-﻿package ngrinder.notification.list
+package ngrinder.notification.list
 
 import static net.grinder.script.Grinder.grinder
 import org.junit.Test
@@ -9,9 +9,9 @@ import net.grinder.scriptengine.groovy.junit.annotation.BeforeThread
 
 @RunWith(GrinderRunner)
 class TestRunner {
-    protected static String baseUrl = System.getProperty('baseUrl', 'http://localhost:8080')
-    protected static String loginEmail = System.getProperty('loginEmail', 'test@example.com')
-    protected static String loginPassword = System.getProperty('loginPassword', 'password')
+    protected static String baseUrl = System.getProperty('baseUrl', 'http://192.100.220.17:8080')
+    protected static String loginEmail = System.getProperty('loginEmail', 'administrator@administrator.adm')
+    protected static String loginPassword = System.getProperty('loginPassword', 'fweiuhfge2232n12@#xSD23@')
 
     protected static net.grinder.script.GTest test
     protected static org.ngrinder.http.HTTPRequest request
@@ -25,10 +25,15 @@ class TestRunner {
     }
 
     protected void login() {
-        org.ngrinder.http.HTTPResponse response = request.POST(fullUrl('/login'), [
+        // JSON 형식으로 로그인 요청 (헤더 포함)
+        org.ngrinder.http.HTTPResponse response = request.POST(
+            fullUrl('/login').toString(),
+            jsonBytes([
                 email   : loginEmail,
                 password: loginPassword
-        ])
+            ]),
+            ['Content-Type': 'application/json; charset=UTF-8']
+        )
 
         assertStatus(response, [200])
 
@@ -47,7 +52,7 @@ class TestRunner {
         if (path.startsWith('http://') || path.startsWith('https://')) {
             return path
         }
-        return "${baseUrl}${path.startsWith('/') ? '' : '/'}${path}"
+        return ("${baseUrl}${path.startsWith('/') ? '' : '/'}${path}").toString()
     }
 
     protected Map<String, String> headers(Map<String, String> base = [:], Map<String, String> extra = [:]) {
@@ -60,7 +65,8 @@ class TestRunner {
     protected Map<String, String> authHeaders(Map<String, String> extra = [:]) {
         Map<String, String> base = [:]
         if (accessToken != null && !accessToken.isBlank()) {
-            base['ATOKEN'] = "Bearer ${accessToken}"
+            // 'ATOKEN' 대신 'Authorization' 사용
+            base['Authorization'] = ("Bearer ${accessToken}").toString()
         }
         return headers(base, extra)
     }
@@ -68,7 +74,7 @@ class TestRunner {
     protected Map<String, String> refreshHeaders(Map<String, String> extra = [:]) {
         Map<String, String> base = authHeaders()
         if (refreshToken != null && !refreshToken.isBlank()) {
-            base.Cookie = "refresh=${refreshToken}"
+            base['Cookie'] = ("refresh=${refreshToken}").toString()
         }
         return headers(base, extra)
     }
@@ -82,24 +88,24 @@ class TestRunner {
     }
 
     protected org.ngrinder.http.HTTPResponse get(String path, Map params = [:], Map<String, String> requestHeaders = null) {
-        return request.GET(fullUrl(path), params ?: [:], requestHeaders ?: authHeaders())
+        return request.GET(fullUrl(path).toString(), params ?: [:], requestHeaders ?: authHeaders())
     }
 
     protected org.ngrinder.http.HTTPResponse postJson(String path, Object body = [:], Map<String, String> requestHeaders = null) {
         return request.POST(
-                fullUrl(path),
+                fullUrl(path).toString(),
                 jsonBytes(body),
                 requestHeaders ?: jsonHeaders()
         )
     }
 
     protected org.ngrinder.http.HTTPResponse postEmpty(String path, Map<String, String> requestHeaders = null) {
-        return request.POST(fullUrl(path), new byte[0], requestHeaders ?: authHeaders())
+        return request.POST(fullUrl(path).toString(), new byte[0], requestHeaders ?: authHeaders())
     }
 
     protected org.ngrinder.http.HTTPResponse putJson(String path, Object body = [:], Map<String, String> requestHeaders = null) {
         return request.PUT(
-                fullUrl(path),
+                fullUrl(path).toString(),
                 jsonBytes(body),
                 requestHeaders ?: jsonHeaders()
         )
@@ -107,31 +113,31 @@ class TestRunner {
 
     protected org.ngrinder.http.HTTPResponse patchJson(String path, Object body = [:], Map<String, String> requestHeaders = null) {
         return request.PATCH(
-                fullUrl(path),
+                fullUrl(path).toString(),
                 jsonBytes(body),
                 requestHeaders ?: jsonHeaders()
         )
     }
 
     protected org.ngrinder.http.HTTPResponse deleteReq(String path, Map params = [:], Map<String, String> requestHeaders = null) {
-        return request.DELETE(fullUrl(path), params ?: [:], requestHeaders ?: authHeaders())
+        return request.DELETE(fullUrl(path).toString(), params ?: [:], requestHeaders ?: authHeaders())
     }
 
     protected Map<String, Object> multipartPayload(List<Map<String, Object>> parts) {
-        String boundary = "----ngrinder-${java.util.UUID.randomUUID().toString().replace('-', '')}"
+        String boundary = ("----ngrinder-${java.util.UUID.randomUUID().toString().replace('-', '')}").toString()
         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()
 
         parts.each { Map<String, Object> part ->
-            out.write(("--${boundary}\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8))
+            out.write(("--${boundary}\r\n").toString().getBytes(java.nio.charset.StandardCharsets.UTF_8))
 
-            String disposition = "Content-Disposition: form-data; name=\"${part.name}\""
+            String disposition = ("Content-Disposition: form-data; name=\"${part.name}\"").toString()
             if (part.filename != null) {
-                disposition += "; filename=\"${part.filename}\""
+                disposition += ("; filename=\"${part.filename}\"").toString()
             }
             out.write((disposition + "\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8))
 
             if (part.contentType != null) {
-                out.write(("Content-Type: ${part.contentType}\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                out.write(("Content-Type: ${part.contentType}\r\n").toString().getBytes(java.nio.charset.StandardCharsets.UTF_8))
             }
 
             out.write("\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8))
@@ -147,12 +153,12 @@ class TestRunner {
             out.write("\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8))
         }
 
-        out.write(("--${boundary}--\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8))
+        out.write(("--${boundary}--\r\n").toString().getBytes(java.nio.charset.StandardCharsets.UTF_8))
         return [boundary: boundary, bytes: out.toByteArray()]
     }
 
     protected Map<String, String> multipartHeaders(String boundary, Map<String, String> extra = [:]) {
-        return headers(authHeaders(), headers(['Content-Type': "multipart/form-data; boundary=${boundary}"], extra))
+        return headers(authHeaders(), headers(['Content-Type': ("multipart/form-data; boundary=${boundary}").toString()], extra))
     }
 
     protected byte[] samplePngBytes() {
@@ -194,7 +200,7 @@ class TestRunner {
 
     protected void assertStatus(org.ngrinder.http.HTTPResponse response, List<Integer> allowedStatuses = [200]) {
         int status = response.getStatusCode()
-        assert allowedStatuses.contains(status) : "Unexpected status ${status}. Body: ${safeBody(response)}"
+        assert allowedStatuses.contains(status) : ("Unexpected status ${status}. Body: ${safeBody(response)}").toString()
     }
 
     protected String safeBody(org.ngrinder.http.HTTPResponse response) {
@@ -228,6 +234,7 @@ class TestRunner {
         String json = groovy.json.JsonOutput.toJson(body)
         return json.getBytes(java.nio.charset.StandardCharsets.UTF_8)
     }
+
     @BeforeProcess
     static void beforeProcess() {
         initProcess("notification-list")
@@ -236,9 +243,7 @@ class TestRunner {
     @BeforeThread
     void beforeThread() {
         grinder.statistics.delayReports = true
-
         login()
-
     }
 
     @Test
@@ -247,4 +252,3 @@ class TestRunner {
         assertStatus(response)
     }
 }
-
