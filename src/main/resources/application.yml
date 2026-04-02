@@ -1,5 +1,5 @@
 portone:
-  portone_secret: ${PORTONE_SECRET:}
+  portone_secret: ${PORTONE_SECRET}
 
 server:
   port: 8080
@@ -7,18 +7,18 @@ server:
     context-path: /api
   error:
     whitelabel:
-      enabled: false  # whitelist error page disabled
+      enabled: false
     path: /error
   ssl:
     enabled: false
 
-
 jwt:
   key: ${JWT_KEY}
   expire: ${JWT_EXPIRE}
+
 project:
   aes:
-    key: aessecretkey01234567891011121314
+    key: "aessecretkey01234567891011121314"
 
 admin:
   email: ${ADMIN_EMAIL}
@@ -91,7 +91,6 @@ spring:
           auth: true
           timeout: 5000
 
-
   datasource:
     driver-class-name: ${DB_SERVER}
     url: ${DB_URL}
@@ -101,28 +100,26 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.MariaDBDialect
     hibernate:
-      ddl-auto: create
+      ddl-auto: update
     properties:
       hibernate:
         format_sql: true
 
 minio:
-  provider: ${STORAGE_PROVIDER:${FILE_STORAGE_PROVIDER:minio}}
-  endpoint: ${MINIO_API:}
-  access-key: ${MINIO_NAME:}
-  secret-key: ${MINIO_SECRET:}
-  bucket_cloud: ${MINIO_CLOUD_BUCKET:}
-  bucket_work: ${MINIO_WORKSPACE_BUCKET:}
-  region: ${MINIO_REGION:}
-  s3-endpoint: ${S3AMAZON_API:}
-  s3-access-key: ${S3AMAZON_NAME:}
-  s3-secret-key: ${S3AMAZON_SECRET:}
-  s3-bucket-cloud: ${S3AMAZON_CLOUD_BUCKET:}
-  s3-bucket-work: ${S3AMAZON_WORKSPACE_BUCKET:}
-  s3-region: ${S3AMAZON_REGION:}
+  provider: ${STORAGE_PROVIDER:minio}
+  endpoint: ${MINIO_API}
+  access-key: ${MINIO_NAME}
+  secret-key: ${MINIO_SECRET}
+  bucket_cloud: ${MINIO_CLOUD_BUCKET}
+  bucket_work: ${MINIO_WORKSPACE_BUCKET}
+  region: ${MINIO_REGION}
+  s3-endpoint: ${S3AMAZON_API}
+  s3-access-key: ${S3AMAZON_NAME}
+  s3-secret-key: ${S3AMAZON_SECRET}
+  s3-bucket-cloud: ${S3AMAZON_CLOUD_BUCKET}
+  s3-bucket-work: ${S3AMAZON_WORKSPACE_BUCKET}
+  s3-region: ${S3AMAZON_REGION}
   presigned-url-expiry-seconds: 1800
-
-
 
 logging:
   level:

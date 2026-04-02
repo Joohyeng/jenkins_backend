@@ -3,8 +3,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: mariadb-pvc
 spec:
+  storageClassName: ""
+  volumeName: mariadb-pv
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 2Gi
+      storage: 5Gi

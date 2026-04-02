@@ -5,7 +5,8 @@ metadata:
   labels:
     app: backend
 spec:
-  replicas: 2
+  # Spring simpleBroker is in-memory, so keep a single backend replica unless a shared broker is added.
+  replicas: 1
   selector:
     matchLabels:
       app: backend
@@ -19,19 +20,6 @@ spec:
       labels:
         app: backend
     spec:
-      initContainers:
-      - name: wait-for-infra
-        image: busybox:1.36
-        command:
-        - sh
-        - -c
-        - |
-          for port in 3306 6379 9000; do
-            until nc -z infra-service "$port"; do
-              echo "waiting for infra-service:${port}"
-              sleep 2
-            done
-          done
       containers:
       - name: backend
         image: lumisia/waffle-app:v1
@@ -41,10 +29,32 @@ spec:
         envFrom:
         - configMapRef:
             name: backend-config
+        env:
+        - name: SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT
+          value: "-1"
+        startupProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          failureThreshold: 30
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 2
+          failureThreshold: 3
         resources:
           requests:
-            cpu: "250m"
-            memory: "512Mi"
+            cpu: "1500m"
+            memory: "2Gi"
           limits:
-            cpu: "500m"
-            memory: "1Gi"
+            cpu: "2500m"
+            memory: "3Gi"
