@@ -9,6 +9,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'http://localhost:8080'
+  const yjsProxyTarget = env.VITE_YJS_PROXY_TARGET || 'http://localhost:1234'
 
   return {
     base: '/',
@@ -23,6 +24,13 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
           ws: true,
+        },
+        '/wss': {
+          target: yjsProxyTarget,
+          changeOrigin: true,
+          secure: false,
+          ws: true,
+          rewrite: (path) => path.replace(/^\/wss/, '') || '/',
         },
       },
     },

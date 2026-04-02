@@ -5,7 +5,7 @@ metadata:
   labels:
     app: backend
 spec:
-  # Spring simpleBroker is in-memory, so keep a single backend replica unless a shared broker is added.
+  # Redis-backed realtime messaging is enabled, so replicas can be increased after verifying remaining in-memory state.
   replicas: 1
   selector:
     matchLabels:
@@ -20,6 +20,7 @@ spec:
       labels:
         app: backend
     spec:
+      nodeName: worker03
       containers:
       - name: backend
         image: lumisia/waffle-app:v1
@@ -53,8 +54,8 @@ spec:
           failureThreshold: 3
         resources:
           requests:
-            cpu: "1500m"
+            cpu: "1000m"
             memory: "2Gi"
           limits:
-            cpu: "2500m"
+            cpu: "1000m"
             memory: "3Gi"

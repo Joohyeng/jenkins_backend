@@ -1,4 +1,4 @@
-apiVersion: apps/v1
+﻿apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: websocket-server-deployment
@@ -10,7 +10,7 @@ spec:
     matchLabels:
       app: websocket-server
   strategy:
-    type: Recreate
+    type: RollingUpdate
   template:
     metadata:
       labels:
@@ -18,16 +18,43 @@ spec:
     spec:
       containers:
       - name: websocket-server
-        # 저장소 이름이 포함된 정확한 이미지 주소를 사용하세요 (예: lumisia/waffle-websocket:v1)
-        image: lumisia/websocket-server:v1
-        imagePullPolicy: IfNotPresent  # 이미지 다운로드 허용 설정
+        image: lumisia/websocket-server:v2
+        imagePullPolicy: Always
         env:
         - name: PORT
           value: "1234"
         - name: HOST
           value: "0.0.0.0"
+        - name: REDIS_HOST
+          value: redis-service
+        - name: REDIS_PORT
+          value: "6379"
+        - name: YJS_REDIS_PREFIX
+          value: "wafflebear:yjs"
+        - name: YJS_SNAPSHOT_SAVE_DELAY_MS
+          value: "150"
         ports:
-        - containerPort: 1234
+        - name: ws
+          containerPort: 1234
+        startupProbe:
+          tcpSocket:
+            port: 1234
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 30
+        readinessProbe:
+          tcpSocket:
+            port: 1234
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 1234
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 2
+          failureThreshold: 3
         resources:
           requests:
             cpu: "100m"

@@ -190,7 +190,7 @@ public class NotificationService {
                 .build();
 
         NotificationListEntity saved = notificationListRepository.save(inbox);
-        sseService.sendEventToUser(receiverUserIdx, "notification", NotificationDto.Payload.fromInbox(saved).toString());
+        sseService.sendEventToUser(receiverUserIdx, "notification", NotificationDto.Payload.fromInbox(saved));
         sendPayloadToUser(receiverUserIdx, NotificationDto.Payload.fromInbox(saved));
         return saved;
     }

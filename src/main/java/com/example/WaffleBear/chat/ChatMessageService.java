@@ -7,6 +7,7 @@ import com.example.WaffleBear.chat.model.entity.ChatRooms;
 import com.example.WaffleBear.chat.model.entity.MessageType;
 import com.example.WaffleBear.config.MinioProperties;
 import com.example.WaffleBear.config.sse.SseService;
+import com.example.WaffleBear.config.stomp.ClusteredStompPublisher;
 import com.example.WaffleBear.feater.FeaterService;
 import com.example.WaffleBear.notification.NotificationService;
 import com.example.WaffleBear.user.model.User;
@@ -20,7 +21,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -41,7 +41,7 @@ public class ChatMessageService {
     private final ParticipantsRepository participantsRepository;
     private final NotificationService notificationService;
     private final ChatRoomService chatRoomService;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final ClusteredStompPublisher stompPublisher;
     private final FeaterService featerService;
     private final MinioClient minioClient;
     private final MinioProperties minioProperties;
@@ -160,7 +160,7 @@ public class ChatMessageService {
                 .ifPresent(msg -> {
                     participant.updateLastReadMessageId(msg.getIdx());
 
-                    messagingTemplate.convertAndSend(
+                    stompPublisher.send(
                             "/sub/chat/room/" + roomIdx,
                             Map.of("type", "READ_UPDATE", "userIdx", userIdx)
                     );
@@ -219,7 +219,7 @@ public class ChatMessageService {
         refreshRoomLastMessage(message.getChatRooms());
 
 
-        messagingTemplate.convertAndSend(
+        stompPublisher.send(
                 "/sub/chat/room/" + roomIdx,
                 Map.of(
                         "type", "MESSAGE_DELETED",

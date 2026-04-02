@@ -115,7 +115,7 @@ services:
     build:
       context: .
       dockerfile: websocket.dockerfile
-    image: lumisia/websocket-server:v1
+    image: lumisia/websocket-server:v2
     environment:
       - PORT=1234
       - HOST=0.0.0.0

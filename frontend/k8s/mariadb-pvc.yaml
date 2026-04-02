@@ -1,12 +1,2 @@
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: mariadb-pvc
-spec:
-  storageClassName: ""
-  volumeName: mariadb-pv
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
+# Deprecated: MariaDB now uses StatefulSet volumeClaimTemplates with Longhorn.
+# This file is intentionally left inert.

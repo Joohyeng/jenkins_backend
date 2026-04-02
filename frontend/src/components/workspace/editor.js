@@ -20,6 +20,7 @@ import { WebsocketProvider } from 'y-websocket'
 
 import { ref } from 'vue'
 import postApi from '@/api/postApi'
+import { getYjsWebsocketUrl } from '@/utils/yjsUrl'
 import loadpost from './loadpost'
 
 export async function initEditor(holderElement, room, initialData, idx, initialTitle, isCollaborative, options = {}) {
@@ -30,7 +31,7 @@ export async function initEditor(holderElement, room, initialData, idx, initialT
   let currentIdx = idx ?? null
 
   if (!isCollaborative) {
-    provider = new WebsocketProvider('wss://www.fileinnout.kro.kr/wss', room, ydoc)
+    provider = new WebsocketProvider(getYjsWebsocketUrl(), room, ydoc)
   }
 
   const yMap         = ydoc.getMap('workspace_data')
