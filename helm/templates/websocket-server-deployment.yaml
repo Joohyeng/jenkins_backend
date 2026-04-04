@@ -1,3 +1,5 @@
+{{- $websocketRollout := .Values.websocket.rollout | default dict -}}
+{{- $websocketBlueGreen := $websocketRollout.blueGreen | default dict -}}
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
@@ -18,8 +20,8 @@ spec:
     blueGreen:
       activeService: {{ include "wafflebear.fullname" . }}-websocket
       previewService: {{ include "wafflebear.fullname" . }}-websocket-preview
-      autoPromotionEnabled: {{ .Values.websocket.rollout.blueGreen.autoPromotionEnabled }}
-      scaleDownDelaySeconds: {{ .Values.websocket.rollout.blueGreen.scaleDownDelaySeconds }}
+      autoPromotionEnabled: {{ default true $websocketBlueGreen.autoPromotionEnabled }}
+      scaleDownDelaySeconds: {{ default 600 $websocketBlueGreen.scaleDownDelaySeconds }}
   template:
     metadata:
       labels:

@@ -113,6 +113,10 @@ websocket:
     limits:
       cpu: "200m"
       memory: "256Mi"
+  rollout:
+    blueGreen:
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 600
 
 redis:
   replicaCount: 1
