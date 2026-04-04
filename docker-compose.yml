@@ -16,7 +16,7 @@ services:
     restart: always
     environment:
       - MARIADB_DATABASE=web
-      - MARIADB_ROOT_PASSWORD=qwer1234
+      - MARIADB_ROOT_PASSWORD=${DB_PASS}
     ports:
       - "3307:3306"
     volumes:

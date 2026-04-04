@@ -1,0 +1,67 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "wafflebear.fullname" . }}-websocket
+  labels:
+    app.kubernetes.io/name: websocket
+    app.kubernetes.io/part-of: wafflebear
+spec:
+  replicas: {{ .Values.websocket.replicaCount }}
+  revisionHistoryLimit: 5
+  progressDeadlineSeconds: 600
+  minReadySeconds: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: websocket
+      app.kubernetes.io/part-of: wafflebear
+  strategy:
+    blueGreen:
+      activeService: {{ include "wafflebear.fullname" . }}-websocket
+      previewService: {{ include "wafflebear.fullname" . }}-websocket-preview
+      autoPromotionEnabled: {{ .Values.websocket.rollout.blueGreen.autoPromotionEnabled }}
+      scaleDownDelaySeconds: {{ .Values.websocket.rollout.blueGreen.scaleDownDelaySeconds }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: websocket
+        app.kubernetes.io/part-of: wafflebear
+    spec:
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: websocket-server
+          image: "{{ .Values.websocket.image.repository }}:{{ .Values.websocket.image.tag }}"
+          imagePullPolicy: {{ .Values.websocket.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "wafflebear.fullname" . }}-websocket-env
+          ports:
+            - containerPort: {{ .Values.websocket.service.port }}
+              name: ws
+          startupProbe:
+            tcpSocket:
+              port: {{ .Values.websocket.service.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.websocket.service.port }}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.websocket.service.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - sleep 20
+          resources:
+{{ toYaml .Values.websocket.resources | indent 12 }}

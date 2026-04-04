@@ -1,0 +1,67 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "wafflebear.fullname" . }}-backend
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: wafflebear
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  revisionHistoryLimit: 5
+  progressDeadlineSeconds: 600
+  minReadySeconds: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend
+      app.kubernetes.io/part-of: wafflebear
+  strategy:
+    blueGreen:
+      activeService: {{ include "wafflebear.fullname" . }}-backend
+      previewService: {{ include "wafflebear.fullname" . }}-backend-preview
+      autoPromotionEnabled: {{ .Values.backend.rollout.blueGreen.autoPromotionEnabled }}
+      scaleDownDelaySeconds: {{ .Values.backend.rollout.blueGreen.scaleDownDelaySeconds }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: backend
+        app.kubernetes.io/part-of: wafflebear
+    spec:
+      terminationGracePeriodSeconds: 90
+      containers:
+        - name: backend
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.backend.service.port }}
+              name: http
+          envFrom:
+            - configMapRef:
+                name: {{ include "wafflebear.fullname" . }}-backend-env
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - sleep 20
+          startupProbe:
+            tcpSocket:
+              port: {{ .Values.backend.service.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.backend.service.port }}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.backend.service.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+{{ toYaml .Values.backend.resources | indent 12 }}

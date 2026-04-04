@@ -1,0 +1,211 @@
+nameOverride: ""
+fullnameOverride: ""
+
+backend:
+  replicaCount: 2
+  image:
+    repository: lumisia/waffle-app
+    tag: v3
+    pullPolicy: IfNotPresent
+  service:
+    port: 8080
+  env:
+    TZ: '{{ env "TZ" | default "Asia/Seoul" }}'
+    PORTONE_SECRET: '{{ env "PORTONE_SECRET" | default "" }}'
+    JWT_KEY: '{{ env "JWT_KEY" | default "" }}'
+    JWT_EXPIRE: '{{ env "JWT_EXPIRE" | default "86400000" }}'
+    ADMIN_EMAIL: '{{ env "ADMIN_EMAIL" | default "administrator@example.com" }}'
+    ADMIN_NAME: '{{ env "ADMIN_NAME" | default "Administrator" }}'
+    ADMIN_ROLE: '{{ env "ADMIN_ROLE" | default "ROLE_ADMIN" }}'
+    ADMIN_PASSWORD: '{{ env "ADMIN_PASSWORD" | default "" }}'
+    APP_FRONTEND_URL: '{{ env "APP_FRONTEND_URL" | default (printf "https://%s" .Values.ingress.hosts.frontend) }}'
+    APP_BACKEND_URL: '{{ env "APP_BACKEND_URL" | default (printf "https://%s/api" .Values.ingress.hosts.backend) }}'
+    APP_SECURE_COOKIE: '{{ env "APP_SECURE_COOKIE" | default "true" }}'
+    REDIS_HOST: '{{ include "wafflebear.fullname" . }}-redis-0.{{ include "wafflebear.fullname" . }}-redis'
+    REDIS_PORT: '{{ .Values.redis.service.port }}'
+    REDIS_SENTINEL_MASTER: '{{ include "wafflebear.fullname" . }}-redis-master'
+    REDIS_SENTINEL_NODES: '{{ include "wafflebear.fullname" . }}-redis-sentinel:{{ .Values.redis.sentinel.port }}'
+    REDIS_PASSWORD: '{{ env "REDIS_PASSWORD" | default "" }}'
+    SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: '-1'
+    GOOGLE_CLIENT_ID: '{{ env "GOOGLE_CLIENT_ID" | default "" }}'
+    GOOGLE_CLIENT_SECRET: '{{ env "GOOGLE_CLIENT_SECRET" | default "" }}'
+    NAVER_CLIENT_ID: '{{ env "NAVER_CLIENT_ID" | default "" }}'
+    NAVER_CLIENT_SECRET: '{{ env "NAVER_CLIENT_SECRET" | default "" }}'
+    CLIENT_ID: '{{ env "CLIENT_ID" | default "" }}'
+    CLIENT_SECRET: '{{ env "CLIENT_SECRET" | default "" }}'
+    MAIL_PORT: '{{ env "MAIL_PORT" | default "587" }}'
+    MAIL_ID: '{{ env "MAIL_ID" | default "" }}'
+    MAIL_PASS: '{{ env "MAIL_PASS" | default "" }}'
+    DB_SERVER: '{{ env "DB_SERVER" | default "org.mariadb.jdbc.Driver" }}'
+    DB_URL: '{{ env "DB_URL" | default "jdbc:mariadb://mariadb:3306/web" }}'
+    DB_ID: '{{ env "DB_ID" | default "web" }}'
+    DB_PASS: '{{ env "DB_PASS" | default "" }}'
+    STORAGE_PROVIDER: '{{ env "STORAGE_PROVIDER" | default "minio" }}'
+    MINIO_API: '{{ env "MINIO_API" | default "https://api.innoutfiles.kro.kr/" }}'
+    MINIO_NAME: '{{ env "MINIO_NAME" | default "fileinnout_backend" }}'
+    MINIO_SECRET: '{{ env "MINIO_SECRET" | default "" }}'
+    MINIO_CLOUD_BUCKET: '{{ env "MINIO_CLOUD_BUCKET" | default "innoutfilebucket" }}'
+    MINIO_WORKSPACE_BUCKET: '{{ env "MINIO_WORKSPACE_BUCKET" | default "innoutfileworkspacebucket" }}'
+    MINIO_REGION: '{{ env "MINIO_REGION" | default "ap-northeast-2" }}'
+    S3AMAZON_API: '{{ env "S3AMAZON_API" | default "https://s3.ap-northeast-2.amazonaws.com" }}'
+    S3AMAZON_NAME: '{{ env "S3AMAZON_NAME" | default "AWS_ACCESS_KEY_ID" }}'
+    S3AMAZON_SECRET: '{{ env "S3AMAZON_SECRET" | default "" }}'
+    S3AMAZON_CLOUD_BUCKET: '{{ env "S3AMAZON_CLOUD_BUCKET" | default "your-bucket-name" }}'
+    S3AMAZON_WORKSPACE_BUCKET: '{{ env "S3AMAZON_WORKSPACE_BUCKET" | default "your-workspace-bucket-name" }}'
+    S3AMAZON_REGION: '{{ env "S3AMAZON_REGION" | default "ap-northeast-2" }}'
+  resources:
+    requests:
+      cpu: "1500m"
+      memory: "2Gi"
+    limits:
+      cpu: "2500m"
+      memory: "3Gi"
+  rollout:
+    blueGreen:
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 300
+
+mariadb:
+  image:
+    repository: mariadb
+    tag: "11.4"
+    pullPolicy: Always
+  storageClassName: longhorn
+  storage:
+    size: 10Gi
+  resources:
+    requests:
+      cpu: "1000m"
+      memory: "2Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: lumisia/waffle-frontend
+    tag: v2
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+  rollout:
+    canary:
+      steps:
+        - setWeight: 20
+        - pause:
+            duration: 60s
+        - setWeight: 50
+        - pause:
+            duration: 120s
+        - setWeight: 100
+
+websocket:
+  replicaCount: 2
+  image:
+    repository: lumisia/websocket-server
+    tag: v2
+    pullPolicy: IfNotPresent
+  service:
+    port: 1234
+  env:
+    PORT: '{{ .Values.websocket.service.port }}'
+    HOST: '0.0.0.0'
+    REDIS_HOST: '{{ include "wafflebear.fullname" . }}-redis-0.{{ include "wafflebear.fullname" . }}-redis'
+    REDIS_PORT: '{{ .Values.redis.service.port }}'
+    REDIS_SENTINEL_MASTER: '{{ include "wafflebear.fullname" . }}-redis-master'
+    REDIS_SENTINEL_NODES: '{{ include "wafflebear.fullname" . }}-redis-sentinel:{{ .Values.redis.sentinel.port }}'
+    REDIS_PASSWORD: '{{ env "REDIS_PASSWORD" | default "" }}'
+    BACKEND_HOST: '{{ include "wafflebear.fullname" . }}-backend'
+    BACKEND_PORT: '{{ .Values.backend.service.port }}'
+    YJS_REDIS_PREFIX: '{{ env "YJS_REDIS_PREFIX" | default "wafflebear:yjs" }}'
+    YJS_SNAPSHOT_SAVE_DELAY_MS: '{{ env "YJS_SNAPSHOT_SAVE_DELAY_MS" | default "150" }}'
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  rollout:
+    blueGreen:
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 600
+
+redis:
+  replicaCount: 1
+  image:
+    repository: redis
+    tag: 7.4-alpine
+    pullPolicy: IfNotPresent
+  service:
+    port: 6379
+  persistence:
+    enabled: true
+    storageClassName: longhorn
+    size: 10Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 75
+  sentinel:
+    replicas: 3
+    port: 26379
+    quorum: 2
+    downAfterMilliseconds: 5000
+    failoverTimeout: 60000
+    parallelSyncs: 1
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+  config:
+    maxmemory: 768mb
+    maxmemoryPolicy: allkeys-lru
+    appendonly: "yes"
+    saveSeconds: "60"
+    saveChanges: "1"
+  resources:
+    requests:
+      cpu: "300m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # Tip: cert-manager 관련 어노테이션은 이제 넣지 않아도 됩니다.
+
+    # CORS 및 헤더 설정
+  
+  hosts:
+    frontend: "www.fileinnoutcloud.kro.kr"
+    backend: "api.fileinnoutcloud.kro.kr"
+    
+  tls:
+    enabled: true
+    # 👈 아까 kubectl로 만든 Secret 이름입니다.
+    secretName: "fileinnoutcloud-tls"

@@ -1,4 +1,5 @@
 import http from 'node:http'
+import https from 'node:https'
 import { randomUUID } from 'node:crypto'
 import Redis from 'ioredis'
 import * as Y from 'yjs'
@@ -15,25 +16,77 @@ const HOST = process.env.HOST || '0.0.0.0'
 const PORT = Number.parseInt(process.env.PORT || '1234', 10)
 const REDIS_HOST = process.env.REDIS_HOST || 'redis'
 const REDIS_PORT = Number.parseInt(process.env.REDIS_PORT || '6379', 10)
+const REDIS_SENTINEL_MASTER = String(process.env.REDIS_SENTINEL_MASTER || '').trim()
+const REDIS_SENTINEL_NODES = String(process.env.REDIS_SENTINEL_NODES || '').trim()
+const REDIS_PASSWORD = String(process.env.REDIS_PASSWORD || '').trim()
 const REDIS_PREFIX = process.env.YJS_REDIS_PREFIX || 'wafflebear:yjs'
 const SNAPSHOT_SAVE_DELAY_MS = Number.parseInt(
   process.env.YJS_SNAPSHOT_SAVE_DELAY_MS || '150',
   10,
 )
 const NODE_ID = process.env.POD_NAME || process.env.HOSTNAME || randomUUID()
+const BACKEND_PROTOCOL = String(process.env.BACKEND_PROTOCOL || 'http')
+  .trim()
+  .toLowerCase()
+  .startsWith('https')
+  ? 'https:'
+  : 'http:'
+const BACKEND_HOST = process.env.BACKEND_HOST || 'backend-app'
+const BACKEND_PORT = Number.parseInt(process.env.BACKEND_PORT || '8080', 10)
+const BACKEND_UPSTREAM = `${BACKEND_HOST}:${BACKEND_PORT}`
+const BACKEND_CLIENT = BACKEND_PROTOCOL === 'https:' ? https : http
 
 const REDIS_ORIGIN = Symbol('redis-origin')
 const SNAPSHOT_ORIGIN = Symbol('snapshot-origin')
 
-const redisPub = new Redis({
-  host: REDIS_HOST,
-  port: REDIS_PORT,
-})
+const parseSentinelNodes = (rawValue) =>
+  String(rawValue || '')
+    .split(/[, \n\t]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [host, rawPort] = entry.split(':')
+      return {
+        host: host.trim(),
+        port: Number.parseInt(rawPort || '26379', 10) || 26379,
+      }
+    })
 
-const redisSub = new Redis({
-  host: REDIS_HOST,
-  port: REDIS_PORT,
-})
+const buildRedisOptions = () => {
+  const sentinels = parseSentinelNodes(REDIS_SENTINEL_NODES)
+
+  if (sentinels.length > 0 && REDIS_SENTINEL_MASTER) {
+    const options = {
+      sentinels,
+      name: REDIS_SENTINEL_MASTER,
+      role: 'master',
+      maxRetriesPerRequest: null,
+    }
+
+    if (REDIS_PASSWORD) {
+      options.password = REDIS_PASSWORD
+    }
+
+    return options
+  }
+
+  const options = {
+    host: REDIS_HOST,
+    port: REDIS_PORT,
+    maxRetriesPerRequest: null,
+  }
+
+  if (REDIS_PASSWORD) {
+    options.password = REDIS_PASSWORD
+  }
+
+  return options
+}
+
+const createRedisClient = () => new Redis(buildRedisOptions())
+
+const redisPub = createRedisClient()
+const redisSub = createRedisClient()
 
 const docStates = new Map()
 
@@ -45,6 +98,132 @@ const normalizeDocName = (rawValue) => {
   const decoded = decodeURIComponent(String(rawValue || '').trim())
   const normalized = decoded.replace(/^\/+|\/+$/g, '')
   return normalized || 'default'
+}
+
+const isRealtimeProxyPath = (pathname) =>
+  pathname.startsWith('/api/sse') || pathname.startsWith('/api/ws-stomp')
+
+const rewriteProxyPath = (pathname, search = '') => `${pathname.replace(/^\/api/, '')}${search}`
+
+const HOP_BY_HOP_HEADERS = new Set([
+  'connection',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailers',
+  'transfer-encoding',
+  'upgrade',
+])
+
+const sanitizeHeaders = (headers) =>
+  Object.fromEntries(
+    Object.entries(headers || {}).filter(([name]) => !HOP_BY_HOP_HEADERS.has(name.toLowerCase())),
+  )
+
+const appendForwardedFor = (existingValue, remoteAddress) => {
+  if (!remoteAddress) {
+    return existingValue
+  }
+
+  if (!existingValue) {
+    return remoteAddress
+  }
+
+  return `${existingValue}, ${remoteAddress}`
+}
+
+const buildProxyHeaders = (req, { upgrade = false } = {}) => {
+  const headers = { ...req.headers }
+  headers.host = BACKEND_UPSTREAM
+  headers['x-forwarded-host'] = req.headers.host || BACKEND_UPSTREAM
+  headers['x-forwarded-proto'] = req.headers['x-forwarded-proto'] || 'http'
+  headers['x-forwarded-for'] = appendForwardedFor(
+    req.headers['x-forwarded-for'],
+    req.socket?.remoteAddress,
+  )
+
+  if (upgrade) {
+    headers.connection = 'Upgrade'
+  } else {
+    delete headers.connection
+    delete headers.upgrade
+  }
+
+  return headers
+}
+
+const proxyHttpRequest = (req, res, upstreamPath) => {
+  const proxyReq = BACKEND_CLIENT.request(
+    {
+      hostname: BACKEND_HOST,
+      port: BACKEND_PORT,
+      method: req.method,
+      path: upstreamPath,
+      headers: buildProxyHeaders(req),
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode || 502, sanitizeHeaders(proxyRes.headers))
+      proxyRes.pipe(res)
+    },
+  )
+
+  proxyReq.on('error', (error) => {
+    console.error('[REALTIME] HTTP proxy failed', error)
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' })
+    }
+    res.end('Realtime proxy upstream unavailable')
+  })
+
+  req.on('aborted', () => proxyReq.destroy())
+  res.on('close', () => proxyReq.destroy())
+
+  req.pipe(proxyReq)
+}
+
+const proxyUpgradeRequest = (req, socket, head, upstreamPath) => {
+  const proxyReq = BACKEND_CLIENT.request(
+    {
+      hostname: BACKEND_HOST,
+      port: BACKEND_PORT,
+      method: req.method,
+      path: upstreamPath,
+      headers: buildProxyHeaders(req, { upgrade: true }),
+    },
+  )
+
+  proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+    const statusLine = `HTTP/1.1 ${proxyRes.statusCode || 101} ${proxyRes.statusMessage || 'Switching Protocols'}`
+    const headerLines = Object.entries(sanitizeHeaders(proxyRes.headers)).flatMap(
+      ([name, value]) =>
+        Array.isArray(value) ? value.map((item) => `${name}: ${item}`) : `${name}: ${value}`,
+    )
+
+    socket.write(`${statusLine}\r\n${headerLines.join('\r\n')}\r\n\r\n`)
+
+    if (proxyHead && proxyHead.length > 0) {
+      socket.write(proxyHead)
+    }
+
+    if (head && head.length > 0) {
+      proxySocket.write(head)
+    }
+
+    proxySocket.pipe(socket).pipe(proxySocket)
+  })
+
+  proxyReq.on('response', (proxyRes) => {
+    console.error('[REALTIME] expected websocket upgrade but received HTTP response', proxyRes.statusCode)
+    socket.destroy()
+  })
+
+  proxyReq.on('error', (error) => {
+    console.error('[REALTIME] websocket proxy failed', error)
+    socket.destroy()
+  })
+
+  proxyReq.end()
 }
 
 const ensureState = (docName, doc) => {
@@ -296,8 +475,15 @@ const handleConnection = async (ws, req) => {
 }
 
 const server = http.createServer((req, res) => {
+  const requestUrl = new URL(req.url || '/', 'http://localhost')
+
+  if (isRealtimeProxyPath(requestUrl.pathname)) {
+    proxyHttpRequest(req, res, rewriteProxyPath(requestUrl.pathname, requestUrl.search))
+    return
+  }
+
   res.writeHead(200, { 'Content-Type': 'text/plain' })
-  res.end('WaffleBear Yjs websocket server')
+  res.end('WaffleBear realtime gateway')
 })
 
 const wss = new WebSocketServer({ noServer: true })
@@ -307,11 +493,18 @@ wss.on('connection', (ws, req) => {
 })
 
 server.on('upgrade', (request, socket, head) => {
+  const requestUrl = new URL(request.url || '/', 'http://localhost')
+
+  if (requestUrl.pathname.startsWith('/api/ws-stomp')) {
+    proxyUpgradeRequest(request, socket, head, rewriteProxyPath(requestUrl.pathname, requestUrl.search))
+    return
+  }
+
   wss.handleUpgrade(request, socket, head, (ws) => {
     wss.emit('connection', ws, request)
   })
 })
 
 server.listen(PORT, HOST, () => {
-  console.log(`Yjs websocket server listening on ${HOST}:${PORT}`)
+  console.log(`WaffleBear realtime gateway listening on ${HOST}:${PORT}`)
 })

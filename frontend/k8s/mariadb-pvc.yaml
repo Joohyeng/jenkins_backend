@@ -1,2 +1,0 @@
-# Deprecated: MariaDB now uses StatefulSet volumeClaimTemplates with Longhorn.
-# This file is intentionally left inert.
