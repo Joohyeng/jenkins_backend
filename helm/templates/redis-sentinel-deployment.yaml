@@ -33,9 +33,9 @@ spec:
             - /etc/redis/scripts/sentinel-entrypoint.sh
           env:
             - name: REDIS_SENTINEL_MASTER
-              value: "{{ include \"wafflebear.fullname\" . }}-redis-master"
+              value: "{{ include "wafflebear.fullname" . }}-redis-master"
             - name: REDIS_SENTINEL_MASTER_HOST
-              value: "{{ include \"wafflebear.fullname\" . }}-redis-0.{{ include \"wafflebear.fullname\" . }}-redis"
+              value: "{{ include "wafflebear.fullname" . }}-redis-0.{{ include "wafflebear.fullname" . }}-redis"
             - name: REDIS_PORT
               value: "{{ .Values.redis.service.port }}"
             - name: REDIS_SENTINEL_PORT

@@ -38,17 +38,17 @@ spec:
             - name: REDIS_DATA_DIR
               value: /data
             - name: REDIS_HEADLESS_SERVICE
-              value: "{{ include \"wafflebear.fullname\" . }}-redis"
+              value: "{{ include "wafflebear.fullname" . }}-redis"
             - name: REDIS_MAXMEMORY
               value: "{{ .Values.redis.config.maxmemory }}"
             - name: REDIS_MAXMEMORY_POLICY
               value: "{{ .Values.redis.config.maxmemoryPolicy }}"
             - name: REDIS_SENTINEL_MASTER
-              value: "{{ include \"wafflebear.fullname\" . }}-redis-master"
+              value: "{{ include "wafflebear.fullname" . }}-redis-master"
             - name: REDIS_SENTINEL_NODES
-              value: "{{ include \"wafflebear.fullname\" . }}-redis-sentinel:{{ .Values.redis.sentinel.port }}"
+              value: "{{ include "wafflebear.fullname" . }}-redis-sentinel:{{ .Values.redis.sentinel.port }}"
             - name: REDIS_FALLBACK_MASTER
-              value: "{{ include \"wafflebear.fullname\" . }}-redis-0.{{ include \"wafflebear.fullname\" . }}-redis"
+              value: "{{ include "wafflebear.fullname" . }}-redis-0.{{ include "wafflebear.fullname" . }}-redis"
           ports:
             - containerPort: {{ .Values.redis.service.port }}
               name: redis

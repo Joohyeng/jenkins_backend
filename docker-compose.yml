@@ -46,7 +46,7 @@ services:
     build:
       context: .
       dockerfile: backend.dockerfile
-    image: lumisia/waffle-app:v3
+    image: lumisia/waffle-app:v4
     ports:
       - "8080:8080"
     environment:
@@ -115,7 +115,7 @@ services:
     build:
       context: .
       dockerfile: websocket.dockerfile
-    image: lumisia/websocket-server:v2
+    image: lumisia/websocket-server:v4
     environment:
       - PORT=1234
       - HOST=0.0.0.0
@@ -135,7 +135,7 @@ services:
     build:
       context: .
       dockerfile: frontend.dockerfile
-    image: lumisia/waffle-frontend:v2  # 이 줄을 추가해서 이름을 강제하세요.
+    image: lumisia/waffle-frontend:v4  # 이 줄을 추가해서 이름을 강제하세요.
     container_name: waffle-frontend
     ports:
       - "80:80"
