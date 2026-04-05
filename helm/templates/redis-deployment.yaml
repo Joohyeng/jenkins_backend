@@ -63,9 +63,9 @@ spec:
                 - /bin/sh
                 - -c
                 - redis-cli -p ${REDIS_PORT:-6379} ping
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            failureThreshold: 30
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 60
           readinessProbe:
             exec:
               command:

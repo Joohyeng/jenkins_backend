@@ -35,6 +35,15 @@ spec:
         - "768mb"
         - --maxmemory-policy
         - allkeys-lru
+        startupProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -h 127.0.0.1 ping
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 60
         readinessProbe:
           exec:
             command:
