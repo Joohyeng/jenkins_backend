@@ -53,7 +53,7 @@ spec:
               port: {{ .Values.backend.service.port }}
             initialDelaySeconds: 20
             periodSeconds: 10
-            failureThreshold: 30
+            failureThreshold: 60
           readinessProbe:
             tcpSocket:
               port: {{ .Values.backend.service.port }}
