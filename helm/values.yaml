@@ -153,7 +153,8 @@ redis:
     storageClassName: longhorn
     size: 10Gi
   autoscaling:
-    enabled: true
+    # Redis is sensitive to attach/mount churn on Longhorn; keep it fixed by default.
+    enabled: false
     minReplicas: 1
     maxReplicas: 5
     targetCPUUtilizationPercentage: 70
