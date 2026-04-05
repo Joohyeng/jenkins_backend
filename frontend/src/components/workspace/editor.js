@@ -184,14 +184,60 @@ export async function initEditor(holderElement, room, initialData, idx, initialT
     youtube:    { class: YouTubeEmbed },
   }
 
-  let editor              = null
-  let suppressLocal       = false
-  let isRendering         = false
-  let previousImageAssets = new Map()
-  let mutationObserver    = null
-  let pendingYVal         = null
-  let remoteRenderInFlight = false
-  let localSyncTimer       = null
+  let editor                = null
+  let suppressLocal         = false
+  let isRendering           = false
+  let previousImageAssets   = new Map()
+  let pendingYVal           = null
+  let remoteRenderInFlight  = false
+  let localSyncTimer        = null
+  let currentRenderedContents = ''
+  let titleObserver         = null
+
+  const isDirtyRef = ref(false)
+
+  const markDirty = () => {
+    isDirtyRef.value = true
+  }
+
+  const markSaved = () => {
+    isDirtyRef.value = false
+  }
+
+  const refreshImageAssetSnapshot = (blocks = []) => {
+    previousImageAssets = new Map(
+      (blocks || [])
+        .filter(b => b.type === 'image' && b.data?.file?.assetIdx)
+        .map(b => [b.data.file.assetIdx, true])
+    )
+  }
+
+  const parseEditorSnapshot = (value) => {
+    if (value == null || value === '') {
+      return { blocks: [] }
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed || trimmed === '""') {
+        return { blocks: [] }
+      }
+
+      try {
+        const parsed = JSON.parse(trimmed)
+        return parsed && typeof parsed === 'object' ? parsed : { blocks: [] }
+      } catch (error) {
+        console.warn('[YJS] failed to parse editor snapshot', error)
+        return { blocks: [] }
+      }
+    }
+
+    if (typeof value === 'object') {
+      return value && typeof value === 'object' ? value : { blocks: [] }
+    }
+
+    return { blocks: [] }
+  }
 
   const syncEditorToYjs = async () => {
     if (suppressLocal || isRendering || !editor) {
@@ -200,14 +246,17 @@ export async function initEditor(holderElement, room, initialData, idx, initialT
 
     try {
       const saved = await editor.save()
-      if (saved.blocks.length === 0) return
-
       const newString = JSON.stringify(saved)
-      if (yMap.get('contents') === newString) return
+      if (yMap.get('contents') === newString) {
+        currentRenderedContents = newString
+        return
+      }
 
       runLocalTransaction(() => {
         yMap.set('contents', newString)
       })
+
+      currentRenderedContents = newString
     } catch (error) {
       console.error('[YJS] local editor sync failed', error)
     }
@@ -224,95 +273,57 @@ export async function initEditor(holderElement, room, initialData, idx, initialT
     }, 100)
   }
   // ─── 블록 단위 diff 적용 ──────────────────────────────────────────────────
-  async function applyBlockDiff(nextBlocks) {
-    await editor.isReady
-    const currentData   = await editor.save()
-    const currentBlocks = currentData.blocks
-    if (JSON.stringify(currentBlocks) === JSON.stringify(nextBlocks)) return
-
-    isRendering   = true
-    suppressLocal = true
-
-    try {
-      const currentMap = new Map(currentBlocks.map((b, i) => [b.id, { block: b, index: i }]))
-      const nextMap    = new Map(nextBlocks.map((b, i)    => [b.id, { block: b, index: i }]))
-
-      const deletedIds = [...currentMap.keys()].filter(id => !nextMap.has(id))
-      for (const id of [...deletedIds].reverse()) {
-        const blockIdx = editor.blocks.getBlockIndex(id)
-        if (blockIdx !== -1) editor.blocks.delete(blockIdx)
-      }
-
-      for (let i = 0; i < nextBlocks.length; i++) {
-        const nextBlock = nextBlocks[i]
-        const existing  = currentMap.get(nextBlock.id)
-        if (!existing) {
-          editor.blocks.insert(nextBlock.type, nextBlock.data, {}, i, true)
-        } else if (JSON.stringify(existing.block.data) !== JSON.stringify(nextBlock.data)) {
-          await editor.blocks.update(nextBlock.id, nextBlock.data)
-        }
-      }
-
-      const afterUpdate = await editor.save()
-      const afterIds    = afterUpdate.blocks.map(b => b.id)
-      const nextIds     = nextBlocks.map(b => b.id)
-      if (JSON.stringify(afterIds) !== JSON.stringify(nextIds)) {
-        await editor.render({ blocks: nextBlocks })
-      }
-    } finally {
-      previousImageAssets = new Map(
-        nextBlocks
-          .filter(b => b.type === 'image' && b.data?.file?.assetIdx)
-          .map(b => [b.data.file.assetIdx, true])
-      )
-      setTimeout(() => {
-        suppressLocal = false
-        isRendering   = false
-        if (pendingYVal) {
-          void flushPendingRender().catch((error) => {
-            console.warn('[YJS] pending remote render flush failed', error)
-          })
-        }
-      }, 50)
-    }
-  }
-
-  async function applyRender(yval) {
-    try {
-      await editor.isReady
-      const parsed = JSON.parse(yval)
-      if (parsed && Array.isArray(parsed.blocks)) {
-        await applyBlockDiff(parsed.blocks)
-      }
-    } catch (e) {
-      console.warn('failed to parse yval', e)
-      suppressLocal = false
-      isRendering   = false
-    }
-  }
-
   async function renderFromY(yval) {
-    if (!editor) return
-    if (!yval || yval === '""' || yval === '') return
+    if (!yval || yval === '""' || yval === '') {
+      return
+    }
+
+    if (!editor) {
+      pendingYVal = yval
+      return
+    }
 
     if (isRendering || remoteRenderInFlight) {
       pendingYVal = yval
       return
     }
 
+    const parsed = parseEditorSnapshot(yval)
+    const serialized = JSON.stringify(parsed)
+
+    if (!serialized || serialized === currentRenderedContents) {
+      return
+    }
+
     remoteRenderInFlight = true
+    isRendering = true
+    suppressLocal = true
+
     try {
-      await applyRender(yval)
+      await editor.isReady
+      await editor.render(parsed)
+      currentRenderedContents = serialized
+      refreshImageAssetSnapshot(parsed.blocks || [])
     } catch (error) {
       console.warn('[YJS] remote render failed', error)
     } finally {
-      remoteRenderInFlight = false
-    }
+      setTimeout(() => {
+        suppressLocal = false
+        isRendering = false
+        remoteRenderInFlight = false
 
-    if (pendingYVal && pendingYVal !== yval) {
-      const nextYVal = pendingYVal
-      pendingYVal = null
-      await renderFromY(nextYVal)
+        if (!pendingYVal) {
+          return
+        }
+
+        const nextYVal = pendingYVal
+        pendingYVal = null
+        if (nextYVal !== yval) {
+          void renderFromY(nextYVal).catch((error) => {
+            console.warn('[YJS] pending remote render flush failed', error)
+          })
+        }
+      }, 50)
     }
   }
 
@@ -337,6 +348,7 @@ export async function initEditor(holderElement, room, initialData, idx, initialT
   } catch (e) {
     console.warn('Initial data parsing failed', e)
   }
+  currentRenderedContents = JSON.stringify(parsedData)
 
   // ─── EditorJS 인스턴스 ────────────────────────────────────────────────────
   editor = new EditorJS({
@@ -355,25 +367,15 @@ export async function initEditor(holderElement, room, initialData, idx, initialT
       }
 
       const initialSaved = await editor.save()
-      initialSaved.blocks
-        .filter(b => b.type === 'image' && b.data?.file?.assetIdx)
-        .forEach(b => previousImageAssets.set(b.data.file.assetIdx, true))
-
-      mutationObserver = new MutationObserver(() => {
-        if (suppressLocal || isRendering) return
-        scheduleLocalSync()
-      })
-
-      mutationObserver.observe(holderElement, {
-        childList:     true,
-        subtree:       true,
-        characterData: true,
-      })
+      refreshImageAssetSnapshot(initialSaved.blocks)
+      currentRenderedContents = JSON.stringify(initialSaved)
+      await flushPendingRender()
 
       holderElement.addEventListener('input', scheduleLocalSync, true)
     },
     onChange: async () => {
       if (suppressLocal || isRendering) return
+      markDirty()
       try {
         const saved = await editor.save()
 
@@ -404,19 +406,33 @@ export async function initEditor(holderElement, room, initialData, idx, initialT
   // ─── 타이틀 바인딩 ────────────────────────────────────────────────────────
   function bindTitleRef(titleRef) {
     if (!titleRef) return
-    yTitle.observe((event) => {
+    const current = yTitle.toString()
+    if (current && titleRef.value !== current) {
+      titleRef.value = current
+    }
+
+    const observer = (event) => {
       if (event?.transaction?.origin === LOCAL_EDIT_ORIGIN) return
       const t = yTitle.toString()
       if (titleRef.value !== t) titleRef.value = t
-    })
+    }
+
+    if (titleObserver) {
+      yTitle.unobserve(titleObserver)
+    }
+    titleObserver = observer
+    yTitle.observe(titleObserver)
   }
 
   function updateTitleFromLocal(val) {
+    const nextTitle = String(val ?? '')
     const current = yTitle.toString()
-    if (current !== val) {
+    if (current !== nextTitle) {
       runLocalTransaction(() => {
         yTitle.delete(0, yTitle.length)
-        yTitle.insert(0, val)
+        if (nextTitle) {
+          yTitle.insert(0, nextTitle)
+        }
       })
     }
   }
@@ -433,6 +449,7 @@ export async function initEditor(holderElement, room, initialData, idx, initialT
       const savedIdx      = response?.idx ?? null
       if (savedIdx != null) currentIdx = savedIdx
       await loadpost.side_list()
+      markSaved()
       return response
     } catch (e) {
       console.error('savePost error:', e)
@@ -443,7 +460,7 @@ export async function initEditor(holderElement, room, initialData, idx, initialT
   yMap.observe((event) => {
     if (event?.transaction?.origin === LOCAL_EDIT_ORIGIN) return
     const newContents = yMap.get('contents')
-    renderFromY(newContents)
+    void renderFromY(newContents)
   })
 
   // ─── 마우스 커서 트래킹 ────────────────────────────────────────────────────
@@ -476,7 +493,10 @@ export async function initEditor(holderElement, room, initialData, idx, initialT
     window.removeEventListener('mousemove', handleMouseMove)
     holderElement.removeEventListener('input', scheduleLocalSync, true)
     clearTimeout(localSyncTimer)
-    mutationObserver?.disconnect()
+    if (titleObserver) {
+      yTitle.unobserve(titleObserver)
+      titleObserver = null
+    }
     try { if (provider) { provider.disconnect(); provider.destroy() } } catch (e) {}
     try { if (editor && typeof editor.destroy === 'function') editor.destroy() } catch (e) {}
     try { if (ydoc) ydoc.destroy() } catch (e) {}
@@ -488,9 +508,12 @@ export async function initEditor(holderElement, room, initialData, idx, initialT
     destroy,
     remoteCursorsRef,
     activeUsersRef,
+    isDirtyRef,
     updateUserPermission,
     bindTitleRef,
     updateTitleFromLocal,
     savePost,
+    markDirty,
+    markSaved,
   }
 }
