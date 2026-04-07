@@ -1,51 +1,57 @@
-name: fullstack deployment
+name: WaffleBear CD (Deploy to Server)
 
 on:
   push:
-    branches: [main]
+    branches: [ "main" ] # 메인 브랜치에 푸시될 때 실행
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      # 1. 코드 체크아웃
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Docker Login
+      # 2. 도커 허브 로그인
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build with Gradle
+      # 3. 각 이미지 빌드 및 푸시 (-f 옵션 사용)
+      # 빌드 단계에서 태그에 ${{ github.run_number }} 사용
+      - name: Build and Push Backend
         run: |
-          chmod +x ./gradlew
-          ./gradlew clean bootJar
+          docker build -t lumisia/waffle-app:v${{ github.run_number }} -f backend.dockerfile .
+          docker push lumisia/waffle-app:v${{ github.run_number }}
+          docker tag lumisia/waffle-app:v${{ github.run_number }} lumisia/waffle-app:latest
+          docker push lumisia/waffle-app:latest
 
-      - name: Build with Docker
-        run : |
-          docker build -t lumisia/backend:latest .
-          docker push lumisia/backend:latest
+      # 빌드 단계에서 태그에 ${{ github.run_number }} 사용
+      - name: Build and Push Websocket
+        run: |
+          docker build -t lumisia/websocket:v${{ github.run_number }} -f websocket.dockerfile .
+          docker push lumisia/websocket:v${{ github.run_number }}
+          docker tag lumisia/websocket:v${{ github.run_number }} lumisia/websocket:latest
+          docker push lumisia/websocket:latest
 
-      - name: run ssh
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Build and Push Frontend
+        run: |
+          docker build -t lumisia/frontend:v${{ github.run_number }} -f frontend.dockerfile .
+          docker push lumisia/frontend:v${{ github.run_number }}
+          docker tag lumisia/frontend:v${{ github.run_number }} lumisia/frontend:latest
+          docker push lumisia/frontend:latest
+
+      # 4. 서버로 배포 (SSH 접속 후 실행)
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.PORT }}
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            echo "Connected to server!"
-            echo test > /tmp/test
-            docker pull lumisia/backend:latest
-            
-            docker stop backend || true
-            docker rm backend || true
-            
-            docker run -d -p 8080:8080 --name backend lumisia/latest
+            cd /home/${{ secrets.SERVER_USER }}/project  # 프로젝트 폴더로 이동
+            docker-compose pull  # 최신 이미지 가져오기
+            docker-compose up -d # 컨테이너 재실행
+            docker image prune -f # 쓰지 않는 이미지 정리
