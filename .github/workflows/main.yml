@@ -1,4 +1,4 @@
-name: WaffleBear CD (Deploy to Server)
+name: Lumisia CD (Deploy to Server)
 
 on:
   push:
@@ -42,16 +42,3 @@ jobs:
           docker push lumisia/frontend:v${{ github.run_number }}
           docker tag lumisia/frontend:v${{ github.run_number }} lumisia/frontend:latest
           docker push lumisia/frontend:latest
-
-      # 4. 서버로 배포 (SSH 접속 후 실행)
-      - name: Deploy to Server
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            cd /home/${{ secrets.SERVER_USER }}/project  # 프로젝트 폴더로 이동
-            docker-compose pull  # 최신 이미지 가져오기
-            docker-compose up -d # 컨테이너 재실행
-            docker image prune -f # 쓰지 않는 이미지 정리
