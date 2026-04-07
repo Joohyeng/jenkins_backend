@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class ChatListCacheService {
-
+    //test
     private static final Duration TTL = Duration.ofSeconds(10);
 
     private final RedisTemplate<String, Object> redisTemplate;
