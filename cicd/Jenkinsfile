@@ -38,7 +38,7 @@ spec:
       emptyDir: {}
     - name: docker-config
       secret:
-        secretName: dockerhub-cred
+        secretName: my-dockerhub-cred
         items:
           - key: .dockerconfigjson
             path: config.json
@@ -47,7 +47,7 @@ spec:
   }
 
   environment {
-    IMAGE_NAME = 'lumisia/waffle-app'
+    IMAGE_NAME = 'rlawngud1999/waffle-app'
     IMAGE_TAG  = "${env.BUILD_NUMBER}"
   }
 
