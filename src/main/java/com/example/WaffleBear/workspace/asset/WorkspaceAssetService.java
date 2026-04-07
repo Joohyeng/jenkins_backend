@@ -20,7 +20,7 @@ import io.minio.*;
 import io.minio.http.Method;
 import io.minio.messages.DeleteObject;
 import lombok.RequiredArgsConstructor;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import com.example.WaffleBear.config.stomp.ClusteredStompPublisher;
 import org.springframework.http.ContentDisposition;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,7 +54,7 @@ public class WorkspaceAssetService {
     private final UserPostRepository userPostRepository;
     private final MinioClient minioClient;
     private final MinioProperties minioProperties;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final ClusteredStompPublisher stompPublisher;
 
     /**
      * 여러 파일을 한번에 업로드 (일반 에셋용)
@@ -613,7 +613,7 @@ public class WorkspaceAssetService {
             return;
         }
 
-        messagingTemplate.convertAndSend(
+        stompPublisher.send(
                 "/sub/workspace/assets/" + workspaceIdx,
                 new WorkspaceAssetDto.AssetEvent(
                         workspaceIdx,

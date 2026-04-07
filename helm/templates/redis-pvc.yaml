@@ -1,0 +1,16 @@
+{{- if .Values.redis.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.redis.service.name }}-data
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: wafflebear
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.redis.persistence.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.redis.persistence.size }}
+{{- end }}

@@ -1,0 +1,110 @@
+{{- if and .Values.redis.autoscaling.enabled (gt (int .Values.redis.autoscaling.maxReplicas) 1) }}
+{{- fail "Redis autoscaling above 1 replica is unsafe with the current single-writer Deployment. Introduce a clustered Redis topology before enabling maxReplicas > 1." }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.redis.service.name }}
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: wafflebear
+spec:
+  replicas: {{ .Values.redis.replicaCount }}
+  revisionHistoryLimit: 5
+  strategy:
+{{- if .Values.redis.persistence.enabled }}
+    type: Recreate
+{{- else }}
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+{{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/part-of: wafflebear
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/part-of: wafflebear
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          args:
+            - --port
+            - "{{ .Values.redis.service.port }}"
+            - --bind
+            - "0.0.0.0"
+            - --protected-mode
+            - "no"
+            - --appendonly
+            - "{{ .Values.redis.config.appendonly }}"
+            - --save
+            - "{{ .Values.redis.config.saveSeconds }}"
+            - "{{ .Values.redis.config.saveChanges }}"
+            - --dir
+            - /data
+            - --maxmemory
+            - "{{ .Values.redis.config.maxmemory }}"
+            - --maxmemory-policy
+            - "{{ .Values.redis.config.maxmemoryPolicy }}"
+          ports:
+            - containerPort: {{ .Values.redis.service.port }}
+              name: redis
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          startupProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - redis-cli -p {{ .Values.redis.service.port }} ping
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - redis-cli -p {{ .Values.redis.service.port }} ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - redis-cli -p {{ .Values.redis.service.port }} ping
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 5
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - redis-cli -p {{ .Values.redis.service.port }} shutdown save || true
+          resources:
+{{ toYaml .Values.redis.resources | indent 12 }}
+      volumes:
+        - name: redis-data
+{{- if .Values.redis.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.redis.service.name }}-data
+{{- else }}
+          emptyDir: {}
+{{- end }}

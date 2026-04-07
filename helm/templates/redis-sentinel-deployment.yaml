@@ -1,0 +1,85 @@
+{{- if .Values.redis.sentinel.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.redis.sentinel.name }}
+  labels:
+    app.kubernetes.io/name: redis-sentinel
+    app.kubernetes.io/part-of: wafflebear
+spec:
+  replicas: {{ .Values.redis.sentinel.replicas }}
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis-sentinel
+      app.kubernetes.io/part-of: wafflebear
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis-sentinel
+        app.kubernetes.io/part-of: wafflebear
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: redis-sentinel
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - /etc/redis/scripts/sentinel-entrypoint.sh
+          env:
+            - name: REDIS_SENTINEL_MASTER
+              value: "{{ .Values.redis.sentinel.masterName }}"
+            - name: REDIS_SENTINEL_MASTER_HOST
+              value: "{{ printf "%s-0.%s.%s.svc.cluster.local" .Values.redis.service.name .Values.redis.service.name .Release.Namespace }}"
+            - name: REDIS_PORT
+              value: "{{ .Values.redis.service.port }}"
+            - name: REDIS_SENTINEL_PORT
+              value: "{{ .Values.redis.sentinel.port }}"
+            - name: REDIS_SENTINEL_QUORUM
+              value: "{{ .Values.redis.sentinel.quorum }}"
+            - name: REDIS_SENTINEL_DOWN_AFTER_MS
+              value: "{{ .Values.redis.sentinel.downAfterMilliseconds }}"
+            - name: REDIS_SENTINEL_FAILOVER_TIMEOUT_MS
+              value: "{{ .Values.redis.sentinel.failoverTimeout }}"
+            - name: REDIS_SENTINEL_PARALLEL_SYNCS
+              value: "{{ .Values.redis.sentinel.parallelSyncs }}"
+          ports:
+            - containerPort: {{ .Values.redis.sentinel.port }}
+              name: sentinel
+          volumeMounts:
+            - name: redis-scripts
+              mountPath: /etc/redis/scripts
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - redis-cli -p ${REDIS_SENTINEL_PORT:-26379} ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - redis-cli -p ${REDIS_SENTINEL_PORT:-26379} ping
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+{{ toYaml .Values.redis.sentinel.resources | indent 12 }}
+      volumes:
+        - name: redis-scripts
+          configMap:
+            name: {{ include "wafflebear.fullname" . }}-redis-scripts
+            defaultMode: 0755
+{{- end }}

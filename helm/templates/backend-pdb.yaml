@@ -1,0 +1,12 @@
+{{- if gt (int .Values.backend.replicaCount) 1 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "wafflebear.fullname" . }}-backend-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend
+      app.kubernetes.io/part-of: wafflebear
+{{- end }}

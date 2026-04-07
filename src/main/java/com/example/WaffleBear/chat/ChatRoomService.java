@@ -6,13 +6,13 @@ import com.example.WaffleBear.chat.model.entity.ChatMessages;
 import com.example.WaffleBear.chat.model.entity.ChatParticipants;
 import com.example.WaffleBear.chat.model.entity.ChatRooms;
 import com.example.WaffleBear.chat.model.entity.MessageType;
+import com.example.WaffleBear.config.stomp.ClusteredStompPublisher;
 import com.example.WaffleBear.user.model.User;
 import com.example.WaffleBear.user.repository.UserRepository;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +29,7 @@ public class ChatRoomService {
     private final UserRepository userRepository;
     private final ParticipantsRepository participantsRepository;
     private final ChatMessageRepository chatMessageRepository;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final ClusteredStompPublisher stompPublisher;
     private final ChatPresenceService chatPresenceService;
     private final ChatListCacheService chatListCacheService;
 
@@ -37,14 +37,14 @@ public class ChatRoomService {
                            UserRepository userRepository,
                            ParticipantsRepository participantsRepository,
                            ChatMessageRepository chatMessageRepository,
-                           @Lazy SimpMessagingTemplate messagingTemplate,
+                           @Lazy ClusteredStompPublisher stompPublisher,
                             ChatPresenceService chatPresenceService,
                            ChatListCacheService chatListCacheService) {
         this.chatRoomRepository = chatRoomRepository;
         this.userRepository = userRepository;
         this.participantsRepository = participantsRepository;
         this.chatMessageRepository = chatMessageRepository;
-        this.messagingTemplate = messagingTemplate;
+        this.stompPublisher = stompPublisher;
         this.chatPresenceService = chatPresenceService;
         this.chatListCacheService = chatListCacheService;
     }
@@ -57,7 +57,7 @@ public class ChatRoomService {
                 "messageType", type.name(),
                 "createdAt",   LocalDateTime.now().toString()
         );
-        messagingTemplate.convertAndSend("/sub/chat/room/" + roomIdx, payload);
+        stompPublisher.send("/sub/chat/room/" + roomIdx, payload);
     }
 
         // 1. 방 생성 (내부에 초대 로직 포함)

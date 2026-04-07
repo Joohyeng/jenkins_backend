@@ -29,7 +29,7 @@ admin:
 app:
   frontend-url: ${APP_FRONTEND_URL:http://localhost}
   backend-url: ${APP_BACKEND_URL:http://localhost/api}
-  secure-cookie: false
+  secure-cookie: ${APP_SECURE_COOKIE:false}
 
 spring:
   data:

@@ -16,6 +16,7 @@ RUN npm run build
 FROM nginx:stable-alpine
 
 ARG BACKEND_UPSTREAM=backend-app:8080
+ARG REALTIME_UPSTREAM=websocket-server:1234
 
 # 빌드된 정적 파일 복사 (보통 빌드 결과물은 dist 또는 build 폴더에 생깁니다)
 # Vite/Vue라면 dist, React라면 build일 확률이 높으니 확인해 보세요.
@@ -29,6 +30,40 @@ RUN printf "server {\n\
         root /usr/share/nginx/html;\n\
         index index.html;\n\
         try_files \$uri \$uri/ /index.html;\n\
+    }\n\
+\n\
+    location /wss {\n\
+        proxy_pass http://$REALTIME_UPSTREAM;\n\
+        proxy_http_version 1.1;\n\
+        proxy_set_header Upgrade \$http_upgrade;\n\
+        proxy_set_header Connection \"upgrade\";\n\
+        proxy_set_header Host \$host;\n\
+        proxy_set_header X-Real-IP \$remote_addr;\n\
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\n\
+        proxy_set_header X-Forwarded-Proto \$scheme;\n\
+    }\n\
+\n\
+    location /api/ws-stomp {\n\
+        proxy_pass http://$REALTIME_UPSTREAM;\n\
+        proxy_http_version 1.1;\n\
+        proxy_set_header Upgrade \$http_upgrade;\n\
+        proxy_set_header Connection \"upgrade\";\n\
+        proxy_set_header Host \$host;\n\
+        proxy_set_header X-Real-IP \$remote_addr;\n\
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\n\
+        proxy_set_header X-Forwarded-Proto \$scheme;\n\
+    }\n\
+\n\
+    location /api/sse {\n\
+        proxy_pass http://$REALTIME_UPSTREAM;\n\
+        proxy_http_version 1.1;\n\
+        proxy_buffering off;\n\
+        proxy_cache off;\n\
+        proxy_read_timeout 3600s;\n\
+        proxy_set_header Host \$host;\n\
+        proxy_set_header X-Real-IP \$remote_addr;\n\
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\n\
+        proxy_set_header X-Forwarded-Proto \$scheme;\n\
     }\n\
 \n\
     location /api {\n\

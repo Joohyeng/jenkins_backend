@@ -1,0 +1,219 @@
+nameOverride: ""
+fullnameOverride: ""
+
+backend:
+  replicaCount: 2
+  image:
+    repository: lumisia/waffle-app
+    tag: v7
+    pullPolicy: Always
+  service:
+    port: 8080
+  env:
+    # Public defaults only. Sensitive values are overridden from values.private.yaml.
+    TZ: 'Asia/Seoul'
+    PORTONE_SECRET: ''
+    JWT_KEY: ''
+    JWT_EXPIRE: '86400000'
+    ADMIN_EMAIL: ''
+    ADMIN_NAME: ''
+    ADMIN_ROLE: 'ROLE_ADMIN'
+    ADMIN_PASSWORD: ''
+    APP_FRONTEND_URL: 'https://www.fileinnoutcloud.kro.kr'
+    APP_BACKEND_URL: 'https://api.fileinnoutcloud.kro.kr/api'
+    APP_SECURE_COOKIE: 'true'
+    REDIS_HOST: '{{ .Values.redis.service.name }}.{{ .Release.Namespace }}.svc.cluster.local'
+    REDIS_PORT: '{{ .Values.redis.service.port }}'
+    REDIS_SENTINEL_MASTER: '{{ if .Values.redis.sentinel.enabled }}{{ .Values.redis.sentinel.masterName }}{{ else }}{{ "" }}{{ end }}'
+    REDIS_SENTINEL_NODES: '{{ if .Values.redis.sentinel.enabled }}{{ .Values.redis.sentinel.name }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.redis.sentinel.port }}{{ else }}{{ "" }}{{ end }}'
+    SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: '-1'
+    GOOGLE_CLIENT_ID: ''
+    GOOGLE_CLIENT_SECRET: ''
+    NAVER_CLIENT_ID: ''
+    NAVER_CLIENT_SECRET: ''
+    CLIENT_ID: ''
+    CLIENT_SECRET: ''
+    MAIL_PORT: '587'
+    MAIL_ID: ''
+    MAIL_PASS: ''
+    DB_SERVER: 'org.mariadb.jdbc.Driver'
+    DB_URL: 'jdbc:mariadb://mariadb:3306/web'
+    DB_ID: ''
+    DB_PASS: ''
+    STORAGE_PROVIDER: 'minio'
+    MINIO_API: 'https://api.innoutfiles.kro.kr/'
+    MINIO_NAME: ''
+    MINIO_SECRET: ''
+    MINIO_CLOUD_BUCKET: 'innoutfilebucket'
+    MINIO_WORKSPACE_BUCKET: 'yourworkspacebucket'
+    MINIO_REGION: 'ap-northeast-2'
+    S3AMAZON_API: 'https://s3.ap-northeast-2.amazonaws.com'
+    S3AMAZON_NAME: ''
+    S3AMAZON_SECRET: ''
+    S3AMAZON_CLOUD_BUCKET: 'your-bucket-name'
+    S3AMAZON_WORKSPACE_BUCKET: 'your-workspace-bucket-name'
+    S3AMAZON_REGION: 'ap-northeast-2'
+  resources:
+    requests:
+      # worker nodes are 4 CPU / 8 GiB each, so keep backend requests conservative
+      # to leave room for blue-green rollout overlap and Longhorn overhead.
+      cpu: "1000m"
+      memory: "2Gi"
+    limits:
+      cpu: "2500m"
+      memory: "3Gi"
+  rollout:
+    blueGreen:
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 300
+
+mariadb:
+  image:
+    repository: mariadb
+    tag: "11.4"
+    pullPolicy: Always
+  storageClassName: longhorn
+  storage:
+    size: 10Gi
+  resources:
+    requests:
+      cpu: "1000m"
+      memory: "2Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: lumisia/waffle-frontend
+    tag: v7
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  rollout:
+    blueGreen:
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 300
+
+websocket:
+  replicaCount: 2
+  image:
+    repository: lumisia/websocket-server
+    tag: v7
+    pullPolicy: Always
+  service:
+    port: 1234
+  env:
+    PORT: '{{ .Values.websocket.service.port }}'
+    HOST: '0.0.0.0'
+    REDIS_HOST: '{{ .Values.redis.service.name }}.{{ .Release.Namespace }}.svc.cluster.local'
+    REDIS_PORT: '{{ .Values.redis.service.port }}'
+    REDIS_SENTINEL_MASTER: '{{ if .Values.redis.sentinel.enabled }}{{ .Values.redis.sentinel.masterName }}{{ else }}{{ "" }}{{ end }}'
+    REDIS_SENTINEL_NODES: '{{ if .Values.redis.sentinel.enabled }}{{ .Values.redis.sentinel.name }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.redis.sentinel.port }}{{ else }}{{ "" }}{{ end }}'
+    BACKEND_HOST: '{{ include "wafflebear.fullname" . }}-backend.{{ .Release.Namespace }}.svc.cluster.local'
+    BACKEND_PORT: '{{ .Values.backend.service.port }}'
+    YJS_REDIS_PREFIX: 'wafflebear:yjs'
+    YJS_SNAPSHOT_SAVE_DELAY_MS: '150'
+  resources:
+    requests:
+      cpu: "75m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  rollout:
+    blueGreen:
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 600
+
+redis:
+  replicaCount: 1
+  image:
+    repository: redis
+    tag: 7.4-alpine
+    pullPolicy: IfNotPresent
+  service:
+    name: redis
+    port: 6379
+  persistence:
+    enabled: true
+    storageClassName: longhorn
+    size: 10Gi
+  autoscaling:
+    # Plain Redis in this chart is single-writer. Keep autoscaling disabled
+    # until a clustered Redis topology is introduced.
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 75
+  sentinel:
+    enabled: false
+    name: redis-sentinel
+    masterName: redis-master
+    masterHost: redis-0.redis
+    replicas: 3
+    port: 26379
+    quorum: 2
+    downAfterMilliseconds: 5000
+    failoverTimeout: 60000
+    parallelSyncs: 1
+    resources:
+      requests:
+        cpu: "30m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+  config:
+    maxmemory: '768mb'
+    maxmemoryPolicy: 'allkeys-lru'
+    appendonly: 'yes'
+    saveSeconds: '60'
+    saveChanges: '1'
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+ingress:
+  enabled: true
+  splitResources: false
+  className: "nginx"
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # Tip: cert-manager 관련 어노테이션은 이제 넣지 않아도 됩니다.
+
+    # CORS 및 헤더 설정
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header 'Access-Control-Expose-Headers' 'Authorization' always;
+      if ($request_uri ~* "^/api$") { return 301 $scheme://$http_host/api/; }
+      if ($request_uri ~* "^/wss$") { return 301 $scheme://$http_host/wss/; }
+  
+  hosts:
+    frontend: "www.fileinnoutcloud.kro.kr"
+    backend: "api.fileinnoutcloud.kro.kr"
+    
+  tls:
+    enabled: true
+    # 👈 아까 kubectl로 만든 Secret 이름입니다.
+    secretName: "fileinnoutcloud-tls"

@@ -1,12 +1,12 @@
 package com.example.WaffleBear.legup.openhexagon;
 
 import com.example.WaffleBear.legup.LegupGameAccessService;
+import com.example.WaffleBear.config.stomp.ClusteredStompPublisher;
 import com.example.WaffleBear.user.model.AuthUserDetails;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 
@@ -18,7 +18,7 @@ public class OpenHexagonSocketController {
 
     private final LegupGameAccessService legupGameAccessService;
     private final OpenHexagonService openHexagonService;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final ClusteredStompPublisher stompPublisher;
 
     @MessageMapping("/game/openhexagon/join")
     public void join(
@@ -74,7 +74,7 @@ public class OpenHexagonSocketController {
     }
 
     private void broadcast(OpenHexagonDto.LobbySnapshot snapshot) {
-        messagingTemplate.convertAndSend("/sub/game/openhexagon/lobby", snapshot);
+        stompPublisher.send("/sub/game/openhexagon/lobby", snapshot);
     }
 
     private AuthUserDetails requireUser(Principal principal) {

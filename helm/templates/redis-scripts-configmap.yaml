@@ -1,0 +1,112 @@
+{{- if .Values.redis.sentinel.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wafflebear.fullname" . }}-redis-scripts
+data:
+  redis-entrypoint.sh: |
+    #!/bin/sh
+    set -eu
+
+    PORT="${REDIS_PORT:-6379}"
+    DATA_DIR="${REDIS_DATA_DIR:-/data}"
+    MAXMEMORY="${REDIS_MAXMEMORY:-768mb}"
+    MAXMEMORY_POLICY="${REDIS_MAXMEMORY_POLICY:-allkeys-lru}"
+    MASTER_NAME="${REDIS_SENTINEL_MASTER:-}"
+    SENTINEL_NODES="${REDIS_SENTINEL_NODES:-}"
+    FALLBACK_MASTER="${REDIS_FALLBACK_MASTER:-}"
+    HEADLESS_SERVICE="${REDIS_HEADLESS_SERVICE:-redis}"
+    SELF_HOST="${HOSTNAME}.${HEADLESS_SERVICE}"
+    MASTER_HOST=""
+    MASTER_PORT="$PORT"
+
+    canonicalize_host() {
+      printf '%s' "$1" | cut -d. -f1
+    }
+
+    get_master_from_sentinel() {
+      if [ -z "$MASTER_NAME" ] || [ -z "$SENTINEL_NODES" ]; then
+        return 1
+      fi
+
+      for node in $(printf '%s' "$SENTINEL_NODES" | tr ',;' '  '); do
+        [ -z "$node" ] && continue
+        sentinel_host="${node%:*}"
+        sentinel_port="${node##*:}"
+        output="$(redis-cli -h "$sentinel_host" -p "$sentinel_port" sentinel get-master-addr-by-name "$MASTER_NAME" 2>/dev/null || true)"
+        if [ -n "$output" ]; then
+          set -- $output
+          if [ "${1:-}" != "" ] && [ "${2:-}" != "" ]; then
+            printf '%s %s\n' "$1" "$2"
+            return 0
+          fi
+        fi
+      done
+
+      return 1
+    }
+
+    resolve_master() {
+      if master="$(get_master_from_sentinel)"; then
+        MASTER_HOST="$(printf '%s' "$master" | awk '{print $1}')"
+        MASTER_PORT="$(printf '%s' "$master" | awk '{print $2}')"
+        return 0
+      fi
+
+      if [ -n "$FALLBACK_MASTER" ]; then
+        MASTER_HOST="$FALLBACK_MASTER"
+        MASTER_PORT="$PORT"
+        return 0
+      fi
+
+      return 1
+    }
+
+    set -- redis-server \
+      --port "$PORT" \
+      --bind 0.0.0.0 \
+      --protected-mode no \
+      --appendonly yes \
+      --save 60 1 \
+      --dir "$DATA_DIR" \
+      --maxmemory "$MAXMEMORY" \
+      --maxmemory-policy "$MAXMEMORY_POLICY"
+
+    if resolve_master && [ "$(canonicalize_host "$MASTER_HOST")" != "$(canonicalize_host "$SELF_HOST")" ]; then
+      exec "$@" --replicaof "$MASTER_HOST" "$MASTER_PORT"
+    fi
+
+    exec "$@"
+  sentinel-entrypoint.sh: |
+    #!/bin/sh
+    set -eu
+
+    MASTER_NAME="${REDIS_SENTINEL_MASTER:-}"
+    MASTER_HOST="${REDIS_SENTINEL_MASTER_HOST:-}"
+    MASTER_PORT="${REDIS_PORT:-6379}"
+    SENTINEL_PORT="${REDIS_SENTINEL_PORT:-26379}"
+    QUORUM="${REDIS_SENTINEL_QUORUM:-2}"
+    DOWN_AFTER="${REDIS_SENTINEL_DOWN_AFTER_MS:-5000}"
+    FAILOVER_TIMEOUT="${REDIS_SENTINEL_FAILOVER_TIMEOUT_MS:-60000}"
+    PARALLEL_SYNCS="${REDIS_SENTINEL_PARALLEL_SYNCS:-1}"
+    CONFIG_FILE="/tmp/sentinel.conf"
+
+    if [ -z "$MASTER_NAME" ] || [ -z "$MASTER_HOST" ]; then
+      echo "REDIS_SENTINEL_MASTER and REDIS_SENTINEL_MASTER_HOST are required" >&2
+      exit 1
+    fi
+
+    cat > "$CONFIG_FILE" <<EOF
+    port $SENTINEL_PORT
+    dir /tmp
+    protected-mode no
+    sentinel monitor $MASTER_NAME $MASTER_HOST $MASTER_PORT $QUORUM
+    sentinel down-after-milliseconds $MASTER_NAME $DOWN_AFTER
+    sentinel failover-timeout $MASTER_NAME $FAILOVER_TIMEOUT
+    sentinel parallel-syncs $MASTER_NAME $PARALLEL_SYNCS
+    sentinel resolve-hostnames yes
+    sentinel announce-hostnames yes
+    EOF
+
+    exec redis-server "$CONFIG_FILE" --sentinel
+{{- end }}

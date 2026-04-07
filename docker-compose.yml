@@ -16,13 +16,19 @@ services:
     restart: always
     environment:
       - MARIADB_DATABASE=web
-      - MARIADB_ROOT_PASSWORD=qwer1234
+      - MARIADB_ROOT_PASSWORD=${DB_PASS}
     ports:
       - "3307:3306"
     volumes:
       - ./db:/var/lib/mysql
     networks:
       - waffle-net
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p$${MARIADB_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
   # 3. MinIO 서버
   minio:
@@ -46,7 +52,7 @@ services:
     build:
       context: .
       dockerfile: backend.dockerfile
-    image: lumisia/waffle-app:v1
+    image: lumisia/waffle-app:v7
     ports:
       - "8080:8080"
     environment:
@@ -103,10 +109,14 @@ services:
       - S3AMAZON_WORKSPACE_BUCKET=${S3AMAZON_WORKSPACE_BUCKET}
       - S3AMAZON_REGION=${S3AMAZON_REGION}
 
+    restart: always
     depends_on:
-      - redis
-      - db
-      - minio
+      redis:
+        condition: service_started
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
     networks:
       - waffle-net
 
@@ -115,12 +125,21 @@ services:
     build:
       context: .
       dockerfile: websocket.dockerfile
-    image: lumisia/websocket-server:v1
+    image: lumisia/websocket-server:v7
     environment:
       - PORT=1234
       - HOST=0.0.0.0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - BACKEND_HOST=backend-app
+      - BACKEND_PORT=8080
     ports:
       - "1234:1234"
+    depends_on:
+      redis:
+        condition: service_started
+      backend-app:
+        condition: service_started
     networks:
       - waffle-net
     restart: always
@@ -135,14 +154,16 @@ services:
     build:
       context: .
       dockerfile: frontend.dockerfile
-    image: lumisia/waffle-frontend:v1  # 이 줄을 추가해서 이름을 강제하세요.
+    image: lumisia/waffle-frontend:v7  # 이 줄을 추가해서 이름을 강제하세요.
     container_name: waffle-frontend
     ports:
       - "80:80"
       - "443:443"
     depends_on:
-      - backend-app
-      - websocket-server
+      backend-app:
+        condition: service_started
+      websocket-server:
+        condition: service_started
     networks:
       - waffle-net
 

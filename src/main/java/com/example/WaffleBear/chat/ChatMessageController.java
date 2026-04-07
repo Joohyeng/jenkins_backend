@@ -2,13 +2,13 @@ package com.example.WaffleBear.chat;
 
 import com.example.WaffleBear.chat.model.dto.ChatMessagesDto;
 import com.example.WaffleBear.common.model.BaseResponse;
+import com.example.WaffleBear.config.stomp.ClusteredStompPublisher;
 import com.example.WaffleBear.user.model.AuthUserDetails;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -22,7 +22,7 @@ import java.util.Map;
 @RequestMapping("/chat")
 public class ChatMessageController {
     private final ChatMessageService chatMessageService;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final ClusteredStompPublisher stompPublisher;
 
     /**
      * 1. 특정 채팅방의 메시지 목록 조회 (HTTP)
@@ -58,7 +58,7 @@ public class ChatMessageController {
         ChatMessagesDto.ListRes savedMsg = chatMessageService.saveMessage(roomIdx, req, user.getIdx());
 
         // 해당 방 구독자들에게 실시간 전송
-        messagingTemplate.convertAndSend("/sub/chat/room/" + roomIdx, savedMsg);
+        stompPublisher.send("/sub/chat/room/" + roomIdx, savedMsg);
     }
 
     @PostMapping("/{roomIdx}/read")

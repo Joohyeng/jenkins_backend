@@ -1,0 +1,15 @@
+{{- if .Values.redis.sentinel.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Values.redis.sentinel.name }}
+  labels:
+    app.kubernetes.io/name: redis-sentinel
+    app.kubernetes.io/part-of: wafflebear
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis-sentinel
+      app.kubernetes.io/part-of: wafflebear
+{{- end }}

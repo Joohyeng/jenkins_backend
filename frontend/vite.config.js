@@ -8,7 +8,8 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'http://localhost:8080'
+  const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'https://api.fileinnoutcloud.kro.kr'
+  const yjsProxyTarget = env.VITE_YJS_PROXY_TARGET || 'https://api.fileinnoutcloud.kro.kr'
 
   return {
     base: '/',
@@ -23,6 +24,13 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
           ws: true,
+        },
+        '/wss': {
+          target: yjsProxyTarget,
+          changeOrigin: true,
+          secure: false,
+          ws: true,
+          rewrite: (path) => path.replace(/^\/wss/, '') || '/',
         },
       },
     },

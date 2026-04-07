@@ -1,0 +1,43 @@
+{{- if and .Values.ingress.enabled .Values.ingress.splitResources }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "wafflebear.fullname" . }}-backend
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  rules:
+    - host: {{ .Values.ingress.hosts.frontend | quote }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "wafflebear.fullname" . }}-backend
+                port:
+                  number: {{ .Values.backend.service.port }}
+    - host: {{ .Values.ingress.hosts.backend | quote }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "wafflebear.fullname" . }}-backend
+                port:
+                  number: {{ .Values.backend.service.port }}
+{{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.hosts.frontend | quote }}
+        - {{ .Values.ingress.hosts.backend | quote }}
+      secretName: {{ .Values.ingress.tls.secretName | quote }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,75 @@
+{{- if false }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "wafflebear.fullname" . }}
+  annotations:
+    # 1. 기본 SSL 및 타임아웃 설정
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    
+    # 2. SSE 및 실시간 통신을 위한 버퍼링 비활성화 (기존 proxy_buffering off 대체)
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+
+    # 3. 추가 헤더 및 리다이렉트 로직 (기존 Nginx의 301 return 및 add_header 대체)
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header 'Access-Control-Expose-Headers' 'Authorization' always;
+      if ($request_uri ~* "^/api$") { return 301 $scheme://$http_host/api/; }
+      if ($request_uri ~* "^/wss$") { return 301 $scheme://$http_host/wss/; }
+
+{{- if .Values.ingress.certManagerClusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.certManagerClusterIssuer | quote }}
+{{- end }}
+{{- with .Values.ingress.annotations }}
+{{ toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  rules:
+    # --- 프론트엔드 호스트 설정 ---
+    - host: {{ .Values.ingress.hosts.frontend | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "wafflebear.fullname" . }}-frontend
+                port:
+                  number: {{ .Values.frontend.service.port }}
+
+    # --- 백엔드 호스트 설정 (API, 웹소켓, SSE 통합) ---
+    - host: {{ .Values.ingress.hosts.backend | quote }}
+      http:
+        paths:
+          # 1. STOMP 웹소켓 및 일반 API (동일한 백엔드 서비스로 연결)
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "wafflebear.fullname" . }}-backend
+                port:
+                  number: {{ .Values.backend.service.port }}
+          
+          # 2. Yjs 등 별도 웹소켓 서버가 있다면 아래 경로 사용
+          - path: /wss
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "wafflebear.fullname" . }}-websocket
+                port:
+                  number: {{ .Values.websocket.service.port }}
+
+{{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.hosts.frontend | quote }}
+        - {{ .Values.ingress.hosts.backend | quote }}
+        # www가 없는 도메인도 인증서에 포함되도록 추가 권장
+        - "fileinnoutcloud.kro.kr" 
+      secretName: {{ .Values.ingress.tls.secretName | quote }}
+{{- end }}
+{{- end }}
